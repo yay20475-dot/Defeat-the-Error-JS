@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Defeat the Error JS</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0; padding: 0;
+            user-select: none; -webkit-user-select: none;
+        }
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            position: fixed;
+            width: 100%; height: 100%;
+        }
+        #game-container {
+            position: relative;
+            width: 100%; height: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            background: #252526;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        #scoreboard {
+            padding: 12px;
+            background: #333333;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #007acc;
+        }
+        #score { color: #4fc1ff; }
+        #hp { color: #ff79c6; }
+        #current-mode { font-weight: bold; }
+        
+        canvas {
+            flex-grow: 1;
+            width: 100%;
+            background: #1e1e1e;
+            display: block;
+        }
+
+#character-select{
+
+position:absolute;
+
+left:0;
+top:0;
+
+width:100%;
+height:100%;
+
+background:#1e1e1e;
+
+display:flex;
+
+flex-direction:column;
+
+justify-content:center;
+
+align-items:center;
+
+gap:20px;
+
+z-index:100;
+
+}
+
+#character-select button{
+
+padding:18px 35px;
+
+font-size:24px;
+
+background:#007acc;
+
+border:none;
+
+color:white;
+
+border-radius:10px;
+
+}
+
+        /* Hệ thống điều khiển Mobile tối ưu */
+        #controls {
+            display: flex;
+            flex-direction: column;
+            background: #2d2d2d;
+            border-top: 2px solid #333333;
+            padding: 10px;
+            gap: 10px;
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+        .btn {
+            flex: 1;
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 14px;
+            text-align: center;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Các nút đổi chế độ đạn typeof */
+        #btn-str { background: #ce9178; color: #000; } /* String */
+        #btn-num { background: #b5cea8; color: #000; } /* Number */
+        #btn-obj { background: #4ec9b0; color: #000; } /* Object */
+        
+        #game-over-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .hidden { display: none !important; }
+        #game-over-screen h1 { color: #f44336; margin-bottom: 20px; font-size: 28px; }
+        #restart-btn {
+            padding: 12px 25px;
+            background: #007acc;
+            border: none; color: white;
+            font-size: 16px; border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="character-select">
+
+<h1>Select Character</h1>
+
+<button onclick="chooseCharacter('typeof')">
+typeof
+</button>
+
+<button onclick="chooseCharacter('instanceof')">
+instanceof
+</button>
+
+</div>
+
+<div id="game-container">
+    <div id="scoreboard">
+        <div>SCORE: <span id="score">0</span></div>
+
+<div><span id="mode-title">TYPE</span>: <span id="current-mode" style="color:#ce9178;">string</span></div>
+
+        <div>HP: <span id="hp">100</span>%</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="controls">
+        <div class="row">
+            <div class="btn" id="btn-left" style="flex: 1.5; background: #555;">◀ Left</div>
+            <div class="btn" id="btn-shoot" style="flex: 2; background: #007acc; color: white;">⚡ SHOOT</div>
+            <div class="btn" id="btn-right" style="flex: 1.5; background: #555;">Right ▶</div>
+
+<div class="row">
+    <div class="btn" id="btn-ultimate" style="background:#ffffff;color:#000;">
+        ERROR (0)
+    </div>
+</div>
+
+        </div>
+        <div class="row">
+            <div class="btn" id="btn-str">"string"</div>
+            <div class="btn" id="btn-num">number</div>
+            <div class="btn" id="btn-obj">object</div>
+        </div>
+    </div>
+
+<div id="game-over-screen" class="hidden">
+    <h1>UNCAUGHT ERROR!</h1>
+    <p style="margin-bottom: 20px; color: #aaa;">The system crashed due to an unhandled exception.</p>
+    <p style="margin-bottom: 20px;">Final Score: <span id="final-score">0</span></p>
+    <button id="restart-btn">Reboot System</button>
+</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    function resizeCanvas() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Hệ thống phân loại map logic khắc chế
+    const TYPE_MODES = {
+        STRING: { name: '"string"', color: '#ce9178', targets: ['SyntaxError'] },
+        NUMBER: { name: 'number', color: '#b5cea8', targets: ['RangeError'] },
+        OBJECT: { name: 'object', color: '#4ec9b0', targets: ['TypeError'] }
+    };
+
+    let currentMode = TYPE_MODES.STRING;
+
+let character = "typeof"; // typeof | instanceof
+
+const INSTANCE_MODES = {
+
+    SYNTAX: {
+        name: "SyntaxError",
+        color: "#ff9800",
+        targets: ["SyntaxError"]
+    },
+
+    RANGE: {
+        name: "RangeError",
+        color: "#4fc3f7",
+        targets: ["RangeError"]
+    },
+
+    TYPE: {
+        name: "TypeError",
+        color: "#66bb6a",
+        targets: ["TypeError"]
+    },
+
+    ERROR: {
+        name: "Error",
+        color: "#ffffff",
+        targets: [
+            "SyntaxError",
+            "RangeError",
+            "TypeError"
+        ]
+    }
+
+};
+
+let ultimateCount = 0;
+let lastUltimateScore = 0;
+let useUltimate=false;
+
+let shootCooldown = 0;
+
+    let gameActive = true;
+    let score = 0;
+    let hp = 100;
+
+    const player = {
+        x: canvas.width / 2 - 40,
+        y: canvas.height - 40,
+        width: 90,
+        height: 30,
+        speed: 8,
+        movingLeft: false,
+        movingRight: false
+    };
+
+    let bullets = [];
+    let enemyList = [];
+    let enemySpawnTimer = 0;
+
+    // Xử lý nút bấm trên Máy tính (Phím 1, 2, 3 để đổi loại đạn)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a') player.movingLeft = true;
+        if (e.key === 'ArrowRight' || e.key === 'd') player.movingRight = true;
+        if (e.key === ' ' || e.key === 'ArrowUp') shootBullet();
+        if (e.key === '1') switchMode(TYPE_MODES.STRING);
+        if (e.key === '2') switchMode(TYPE_MODES.NUMBER);
+        if (e.key === '3') switchMode(TYPE_MODES.OBJECT);
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a') player.movingLeft = false;
+        if (e.key === 'ArrowRight' || e.key === 'd') player.movingRight = false;
+    });
+
+function chooseCharacter(name){
+
+character=name;
+
+document.getElementById("character-select").style.display="none";
+
+if(character==="typeof"){
+
+switchMode(TYPE_MODES.STRING);
+
+document.getElementById("btn-str").innerText='"string"';
+document.getElementById("btn-num").innerText="number";
+document.getElementById("btn-obj").innerText="object";
+
+btnUltimate.style.display="none";
+
+}else{
+
+switchMode(INSTANCE_MODES.SYNTAX);
+
+document.getElementById("btn-str").innerText="SyntaxError";
+document.getElementById("btn-num").innerText="RangeError";
+document.getElementById("btn-obj").innerText="TypeError";
+
+btnUltimate.style.display="block";
+btnUltimate.innerText=`ERROR (${ultimateCount})`;
+
+}
+
+}
+
+    // Đổi chế độ bắn
+    function switchMode(mode) {
+        currentMode = mode;
+        const uiText = document.getElementById('current-mode');
+        uiText.innerText = mode.name;
+        uiText.style.color = mode.color;
+    }
+
+document.getElementById('btn-str').addEventListener('touchstart',(e)=>{
+
+    e.preventDefault();
+
+    if(character==="typeof"){
+
+        switchMode(TYPE_MODES.STRING);
+
+    }else{
+
+        switchMode(INSTANCE_MODES.SYNTAX);
+
+    }
+
+});
+
+document.getElementById('btn-num').addEventListener('touchstart',(e)=>{
+
+    e.preventDefault();
+
+    if(character==="typeof"){
+
+        switchMode(TYPE_MODES.NUMBER);
+
+    }else{
+
+        switchMode(INSTANCE_MODES.RANGE);
+
+    }
+
+});
+
+document.getElementById('btn-obj').addEventListener('touchstart',(e)=>{
+
+    e.preventDefault();
+
+    if(character==="typeof"){
+
+        switchMode(TYPE_MODES.OBJECT);
+
+    }else{
+
+        switchMode(INSTANCE_MODES.TYPE);
+
+    }
+
+});
+
+    const btnLeft = document.getElementById('btn-left');
+    const btnRight = document.getElementById('btn-right');
+    const btnShoot = document.getElementById('btn-shoot');
+const btnUltimate = document.getElementById("btn-ultimate");
+
+    btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); player.movingLeft = true; });
+    btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); player.movingLeft = false; });
+    btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); player.movingRight = true; });
+    btnRight.addEventListener('touchend', (e) => { e.preventDefault(); player.movingRight = false; });
+    btnShoot.addEventListener('touchstart', (e) => { e.preventDefault(); shootBullet(); });
+
+btnUltimate.addEventListener("touchstart",(e)=>{
+
+    e.preventDefault();
+
+    if(character!=="instanceof") return;
+
+    if(ultimateCount<=0) return;
+
+    ultimateCount--;
+
+    btnUltimate.innerText=`ERROR (${ultimateCount})`;
+
+    useUltimate=true;
+
+});
+
+    // Cơ chế bắn typeof()
+    function shootBullet() {
+        if (!gameActive) return;
+
+const now=Date.now();
+
+const cd=character==="typeof"
+?80
+:400;
+
+if(now<shootCooldown)return;
+
+shootCooldown=now+cd;
+
+        bullets.push({
+            x: player.x + player.width / 2,
+            y: player.y,
+
+text:
+
+character==="typeof"
+
+? `typeof ${currentMode.name}`
+
+: `instanceof ${useUltimate ? "Error" : currentMode.name}`,
+
+mode: useUltimate ? INSTANCE_MODES.ERROR : currentMode,
+
+            speed: 7
+        });
+
+useUltimate=false;
+
+    }
+
+function spawnEnemy() {
+
+    // Chỉ xuất hiện khi điểm cao
+    if (score >= 250 && Math.random() < 0.1) {
+
+const bosses = [
+    "SyntaxError",
+    "RangeError",
+    "TypeError",
+    "Error"
+];
+
+const bossType = bosses[Math.floor(Math.random() * bosses.length)];
+
+const bossX = Math.random() * (canvas.width - 120);
+
+enemyList.push({
+    x: bossX,
+    y: -50,
+    text: bossType,
+    boss: true,
+    state: "fall",
+    speed: 2,
+    spawnTimer: 0
+});
+
+        return;
+    }
+
+    const errorsPool = [
+        "SyntaxError",
+        "RangeError",
+        "TypeError"
+    ];
+
+    enemyList.push({
+        x: Math.random() * (canvas.width - 120) + 10,
+        y: -20,
+        text: errorsPool[
+            Math.floor(Math.random() * errorsPool.length)
+        ],
+        speed: 1.2 + score / 200
+    });
+
+}
+
+    function update() {
+        if (!gameActive) return;
+
+        if (player.movingLeft && player.x > 0) player.x -= player.speed;
+        if (player.movingRight && player.x < canvas.width - player.width) player.x += player.speed;
+
+        bullets.forEach((bullet, bIndex) => {
+            bullet.y -= bullet.speed;
+            if (bullet.y < 0) bullets.splice(bIndex, 1);
+        });
+
+        enemySpawnTimer++;
+        if (enemySpawnTimer > 50) { 
+            spawnEnemy();
+            enemySpawnTimer = 0;
+        }
+
+        enemyList.forEach((enemy, eIndex) => {
+
+if(!enemy.boss){
+    enemy.y += enemy.speed;
+}
+
+if(enemy.boss){
+
+    if(enemy.moveX===undefined){
+        enemy.moveX=3;
+    }
+
+    if(enemy.state==="fall"){
+
+        enemy.y += enemy.speed;
+
+const stopY = canvas.height * 0.25;
+
+if(enemy.y >= stopY){
+
+    enemy.y = stopY;
+    enemy.state = "spawn";
+
+}
+
+    }
+
+    else if(enemy.state==="spawn"){
+
+        // đi qua đi lại theo chiều X
+        enemy.x += enemy.moveX;
+
+        if(enemy.x <= 0){
+            enemy.x = 0;
+            enemy.moveX = Math.abs(enemy.moveX);
+        }
+
+        if(enemy.x >= canvas.width - 100){
+            enemy.x = canvas.width - 100;
+            enemy.moveX = -Math.abs(enemy.moveX);
+        }
+
+        enemy.spawnTimer++;
+
+if(enemy.spawnTimer % 100 === 0){
+
+    const t =
+        enemy.text === "Error"
+        ? ["SyntaxError","RangeError","TypeError"][Math.floor(Math.random()*3)]
+        : enemy.text;
+
+    enemyList.push({
+        x: enemy.x + Math.random()*120 - 30,
+        y: enemy.y + 35,
+        text: t,
+        speed: 2
+    });
+
+}
+    }
+}
+            if (enemy.y > canvas.height) {
+                hp -= 20;
+                enemyList.splice(eIndex, 1);
+                checkGameOver();
+            }
+
+            // Xử lý va chạm và logic kiểm tra kiểu dữ liệu (typeof)
+            bullets.forEach((bullet, bIndex) => {
+const left   = enemy.boss ? enemy.x - 10 : enemy.x - 10;
+const right  = enemy.boss ? enemy.x + 110 : enemy.x + 110;
+const top    = enemy.boss ? enemy.y - 25 : enemy.y - 20;
+const bottom = enemy.boss ? enemy.y + 20 : enemy.y + 10;
+
+if(
+    bullet.x > left &&
+    bullet.x < right &&
+    bullet.y > top &&
+    bullet.y < bottom
+){
+                    
+
+if (
+
+    // Boss Error: bị mọi type giết
+    (enemy.boss && enemy.text === "Error")
+
+    ||
+
+    // Boss SyntaxError
+    (enemy.boss && enemy.text === "SyntaxError" &&
+        (bullet.mode.name === '"string"' ||
+         bullet.mode.name === "SyntaxError" ||
+         bullet.mode.name === "Error"))
+
+    ||
+
+    // Boss RangeError
+    (enemy.boss && enemy.text === "RangeError" &&
+        (bullet.mode.name === "number" ||
+         bullet.mode.name === "RangeError" ||
+         bullet.mode.name === "Error"))
+
+    ||
+
+    // Boss TypeError
+    (enemy.boss && enemy.text === "TypeError" &&
+        (bullet.mode.name === "object" ||
+         bullet.mode.name === "TypeError" ||
+         bullet.mode.name === "Error"))
+
+    ||
+
+    // Enemy thường
+    (!enemy.boss &&
+        (bullet.mode.targets.includes(enemy.text) ||
+         bullet.mode.name === "Error"))
+
+){
+
+if(character==="instanceof"){
+
+    // Passive mới của instanceof:
+    // Giết 1 enemy thì toàn bộ enemy cùng loại chết theo
+
+    const deadType = enemy.text;
+
+    const killed = enemyList.filter(e=>e.text===deadType).length;
+
+    enemyList = enemyList.filter(e=>e.text!==deadType);
+
+    score += killed * 10;
+
+    while(score-lastUltimateScore>=100){
+        ultimateCount++;
+        btnUltimate.innerText=`ERROR (${ultimateCount})`;
+        lastUltimateScore+=100;
+    }
+
+}else{
+
+    // typeof chỉ giết đúng enemy trúng đạn
+
+    enemyList.splice(eIndex,1);
+
+    score += 10;
+
+}
+
+document.getElementById('score').innerText = score;
+} else {
+                        // Bắn sai hệ: Error hấp thụ năng lượng và lao xuống nhanh gấp đôi!
+                        enemy.speed += 2;
+                        
+                        // Chi tiết cơ chế phản tác dụng của typeof khi ép sai kiểu:
+                        if (bullet.mode.name === 'number') {
+                            // Ép một chuỗi/đối tượng thành số sai cách sẽ tạo ra NaN (Not a Number)
+                            enemy.text = `NaN_${enemy.text}`;
+                        } else if (bullet.mode.name === 'object') {
+                            // Ép sai thành Object khiến lỗi bị đóng gói thành Object lơ lửng, khó xử lý hơn
+                            enemy.text = `[object ${enemy.text}]`;
+                        } else {
+                            // Ép sai thành String khiến lỗi biến thành chuỗi text thông báo chết chóc
+                            enemy.text = `"${enemy.text}"_Stringified`;
+                        }
+
+                        // Phạt trực tiếp vào HP vì làm rối loạn cây Logic Code
+                        hp -= 5;
+                        if (hp < 0) hp = 0;
+                        document.getElementById('hp').innerText = hp;
+                        checkGameOver();
+                    }
+                    bullets.splice(bIndex, 1);
+                }
+            });
+        });
+
+        document.getElementById('hp').innerText = Math.max(0, hp);
+    }
+
+    // Hàm vẽ giao diện lên Canvas
+    function draw() {
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Nền Code Grid mờ
+        ctx.strokeStyle = '#2d2d2d';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < canvas.width; i += 50) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+        }
+
+        // Vẽ Khung Nhân Vật Chính: Thể hiện hàm typeof()
+        ctx.fillStyle = '#6a9955'; // Màu xanh lá hàm hệ thống
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '14px Courier New';
+        ctx.textAlign = 'center';
+
+ctx.fillText(
+    character === "typeof" ? "typeof" : "instanceof",
+    player.x + player.width / 2,
+    player.y + 18
+);
+
+        // Vẽ Đạn bay ra (Chứa thông tin kiểu dữ liệu tương ứng)
+        ctx.font = '13px Courier New';
+        bullets.forEach(bullet => {
+            ctx.fillStyle = bullet.mode.color;
+            ctx.fillText(bullet.text, bullet.x, bullet.y);
+        });
+
+        // Vẽ các Quái vật Error lao xuống
+        ctx.font = 'bold 15px Courier New';
+        enemyList.forEach(enemy => {
+            // Nếu lỗi đã bị biến đổi do bắn sai hệ, đổi sang màu hồng neon cảnh báo nguy hiểm
+            ctx.fillStyle = (enemy.text.includes('NaN') || enemy.text.includes('[object') || enemy.text.includes('Stringified')) ? '#ff0055' : '#f44336';
+
+if(enemy.boss){
+
+    ctx.strokeStyle="#ffffff";
+    ctx.lineWidth=3;
+
+    ctx.strokeRect(
+        enemy.x-10,
+        enemy.y-25,
+        120,
+        45
+    );
+
+    ctx.fillStyle="#ffffff";
+ctx.fillText(
+    "✖ " + enemy.text,
+        enemy.x+50,
+        enemy.y
+    );
+
+}else{
+
+    ctx.fillStyle=
+        (enemy.text.includes("NaN")
+        ||enemy.text.includes("[object")
+        ||enemy.text.includes("Stringified"))
+        ?"#ff0055"
+        :"#f44336";
+
+    ctx.fillText(
+        "✖ "+enemy.text,
+        enemy.x,
+        enemy.y
+    );
+
+}
+        });
+    }
+
+    function checkGameOver() {
+        if (hp <= 0) {
+            gameActive = false;
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+    }
+
+    // Làm mới hệ thống game
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        score = 0; hp = 100; bullets = []; enemyList = []; gameActive = true;
+
+ultimateCount=0;
+lastUltimateScore=0;
+useUltimate=false;
+
+btnUltimate.innerText="ERROR (0)";
+
+document.getElementById('score').innerText = score;
+        document.getElementById('hp').innerText = hp;
+        switchMode(TYPE_MODES.STRING);
+        document.getElementById('game-over-screen').classList.add('hidden');
+        resizeCanvas();
+    });
+
+    // Vòng lặp Game Loop chính
+    function gameLoop() {
+        update(); draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+</script>
+
+</body>
+</html>
